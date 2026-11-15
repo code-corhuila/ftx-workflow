@@ -1,0 +1,43 @@
+# Futbolix end to end: every service of the reservation flow on one platform network.
+#
+# ftx-workflow is NOT a saga orchestrator: ADR-010 chose choreography (each service reacts to the
+# others' events on futbolix.events). This repository composes the platform, owns the message
+# broker, and keeps the end-to-end checks and the failure-injection demo of the release.
+#
+# The single PostgreSQL instance is NOT here (Annex J): it lives in ftx-infra-postgres and must be
+# up, with every -db migrated, before this file. scripts/start-platform.ps1 does it all in order.
+#
+#   docker compose --env-file ../ftx-infra-postgres/env/dev.env --env-file env/dev.env up -d --build --wait
+include:
+  - path: ../ftx-customers-api/deploy/compose.yml
+  - path: ../ftx-courts-api/deploy/compose.yml
+  - path: ../ftx-schedules-api/deploy/compose.yml
+  - path: ../ftx-reservations-api/deploy/compose.yml
+  - path: ../ftx-api-gateway/deploy/compose.yml
+
+services:
+  rabbitmq:
+    # Broker of futbolix.events (02-domain/domain-events.md). Pinned image.
+    image: rabbitmq:3.13.7-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?set RABBITMQ_USER in env/dev.env}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in env/dev.env}
+    ports:
+      - "127.0.0.1:${RABBITMQ_UI_PORT:-15672}:15672"   # management UI, only from this computer
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq                # queued messages survive a restart
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [platform]
+
+volumes:
+  rabbitmq-data:
+
+networks:
+  platform:
+    name: ${PLATFORM_NETWORK:-platform}
+    external: true
