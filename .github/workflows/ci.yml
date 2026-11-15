@@ -1,0 +1,21 @@
+# Secret scan over the whole history on every Pull Request (M2). The platform itself is exercised
+# end to end by scripts/demo-falla.ps1 on a machine with Docker.
+name: ci
+
+on:
+  pull_request:
+    branches: [develop, qa, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks over code, docs and the whole commit history
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 git /repo --redact --verbose --exit-code 1
